@@ -43,7 +43,7 @@ class SatelliteDataset(Dataset):
         for image_format in formats_list:
             images_list += glob.glob(images_dir + f"/*.{image_format}")
         annotations_list = glob.glob(annotations_dir + "/*.pkl")
-        if len(images_list) != len(annotations_list): logger.error("Different number of images and annotation files!")
+        if len(images_list) != len(annotations_list): logger.warning("Different number of images and annotation files!")
         
         # Load the metadata
         logger.info("Loading the dataset...")
@@ -54,8 +54,9 @@ class SatelliteDataset(Dataset):
             
             with open(annotation_path, 'rb') as f:
                 annotations = pickle.load(f)
-                
+            
             # Leave only small vehicles
+            # annotations = annotations['object_locations']['small'][0]
             annotations = annotations['small']
             
             metadata_ = {

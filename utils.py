@@ -1,5 +1,9 @@
+import torch
+from pathlib import Path
+from torch.utils.tensorboard import SummaryWriter
+
 from models_zoo.PointDetector.unet_model import UNet
-from losses import MSELoss
+from losses import MSELoss, WeightedHausdorffDistance, SmoothL1Loss
 from dataset import SatelliteDataset
 
 from logger import get_logger
@@ -10,15 +14,62 @@ import pdb
 def make_train_step():
     pass
 
-def get_loss_fn(loss_fn_keyword):
-    if loss_fn_keyword == "MSELoss":
-        loss_fn = MSELoss()
-    else:
-        raise NotImplementedError
-    logger.info(f"Using {loss_fn_keyword} loss.")
-    return loss_fn
+def collate_fn(samples):
+    images = []
+    anns = []
+    
+    for sample in samples:
+        # Extract the sample image and annotations
+        image = sample[0]
+        ann = sample[1]
+        
+        # Add to the lists of images and annotations
+        images.append(image)
+        anns.append(ann)
+    
+    images = torch.stack(images)
+    
+    return (images, anns)
 
-def get_model(cfg):
+def check_cfg(cfg, verbose=0):
+    # Create the required directories
+    required_dirs = []
+    required_dirs.append(cfg.params['OUTPUT_DIR'])
+    required_dirs.append(cfg.logging_params['LOG_DIR'])
+    
+    for directory in required_dirs:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        if verbose > 0:
+            logger.debug(f"Created {directory}.")
+
+def get_loss_fns(cfg, device='cpu'):
+    def get_loss_fn(loss_fn_keyword, det_vs_class):
+        if loss_fn_keyword == "MSELoss":
+            loss_fn = MSELoss()
+        elif loss_fn_keyword == "WeightedHausdorffDistance":
+            loss_fn = WeightedHausdorffDistance(
+                resized_height=cfg.params['IMG_HEIGHT'], 
+                resized_width=cfg.params['IMG_WIDTH'],
+                device=device
+            )
+        elif loss_fn_keyword == "SmoothL1Loss":
+            loss_fn = SmoothL1Loss()
+        else:
+            raise NotImplementedError
+        logger.info(f"Using {loss_fn_keyword} loss for {det_vs_class}.")
+        return loss_fn
+    
+    # Extract the loss names
+    det_loss = cfg.params['DET_LOSS_FN']
+    class_loss = cfg.params['CLASS_LOSS_FN']
+    
+    # Generate the loss function
+    det_loss_fn = get_loss_fn(det_loss, "detection")
+    class_loss_fn = get_loss_fn(class_loss, "classification")
+    
+    return (det_loss_fn, class_loss_fn)
+
+def get_model(cfg, device='cpu'):
     if cfg.params["MODEL_NAME"] == "UNet":
         model = UNet(
             n_channels=cfg.params['N_CHANNELS'],
@@ -26,6 +77,7 @@ def get_model(cfg):
             height=cfg.params['IMG_HEIGHT'],
             width=cfg.params['IMG_WIDTH']
         )
+        model = model.to(device)
     else:
         raise NotImplementedError
     logger.info(f"Loaded {cfg.params['MODEL_NAME']} model.")
@@ -37,5 +89,18 @@ def get_dataset(cfg, transform=None, device='cpu'):
         transform=transform,
         device=device
     )
-    logger.info(f"Loaded dataset.")
+    logger.info(f"Loaded a dataset with {len(dataset)} images.")
     return dataset
+
+def get_tensorboard_writer(log_dir):
+    writer = SummaryWriter(log_dir=log_dir)
+    logger.info(f"Initialized a TensorBoard writer with the logging directory at {log_dir}.")
+    return writer
+
+def get_optimizer_scheduler(model, base_lr, lr_gamma, scheduled=False):
+    if scheduled:
+        raise NotImplementedError
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
+        scheduler = None
+        return (optimizer, scheduler)
