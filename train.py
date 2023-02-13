@@ -43,7 +43,6 @@ def cleanup():
     
 def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank, start_epoch, iter_counter):
     # Prepare to training
-    iter_counter = 0
     det_loss_fn, count_loss_fn = loss_fns
     det_coeff = cfg.params['DET_COEFFICIENT']
     count_coeff = cfg.params['COUNT_COEFFICIENT']
@@ -51,7 +50,7 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, r
     
     # Check that the start epoch is less than the end epoch
     if start_epoch >= end_epoch:
-        logger.warning("Start epoch is greater or equal to the end epoch! Terminating the training.")
+        logger.warning("Start epoch is greater than or equal to the end epoch! Terminating the training.")
         return
     
     for epoch in range(start_epoch, cfg.params['N_EPOCHS']):
