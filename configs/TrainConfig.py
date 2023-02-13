@@ -8,9 +8,9 @@ class TrainConfig(BaseConfig):
         
         self.params = {
             "OUTPUT_DIR": "output/",
-            "N_EPOCHS": 5,
-            "BATCH_SIZE": 4,
-            "BASE_LR": 0.000001,
+            "N_EPOCHS": 5000,
+            "BATCH_SIZE": 16,
+            "BASE_LR": 0.0001,
             "LR_GAMMA": 0.1,
             "LR_SCHEDULING_ON": False,
             "N_CHANNELS": 3,
@@ -18,13 +18,14 @@ class TrainConfig(BaseConfig):
             "IMG_HEIGHT": 384,
             "IMG_WIDTH": 384,
             "MODEL_NAME": "UNet",
-            "DET_LOSS_FN": "SmoothL1Loss",
-            "CLASS_LOSS_FN": "MSELoss",
-            "DET_COEFFICIENT": 1.0,
-            "CLASS_COEFFICIENT": 0.01,
+            "DET_LOSS_FN": "MSELoss",
+            "COUNT_LOSS_FN": "SmoothL1Loss",
+            "DET_COEFFICIENT": 0.01,
+            "COUNT_COEFFICIENT": 1.0,
             "EVAL_ONLY": False,
             "SHUFFLE": True,
-            "VERBOSE": 1
+            "VERBOSE": 1,
+            "DEBUG": False
         }
         
         self.dataset_params = {

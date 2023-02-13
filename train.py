@@ -1,6 +1,9 @@
+import cv2
 import torch
 from tqdm import tqdm
+from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
+from torchvision.utils import save_image
 
 from configs.TrainConfig import TrainConfig
 from transforms import SatTransforms
@@ -29,9 +32,9 @@ import pdb
 def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
     # Prepare to training
     iter_counter = 0
-    det_loss_fn, class_loss_fn = loss_fns
+    det_loss_fn, count_loss_fn = loss_fns
     det_coeff = cfg.params['DET_COEFFICIENT']
-    class_coeff = cfg.params['CLASS_COEFFICIENT']
+    count_coeff = cfg.params['COUNT_COEFFICIENT']
     
     for epoch in range(cfg.params['N_EPOCHS']):
         training_bar = tqdm(train_loader, desc=f"Epoch #{epoch + 1}")
@@ -39,6 +42,30 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             # Predict
             model.train()
             det_preds, n_objects_preds = model(images_batch)
+            
+#             # Save the predicted heatmap
+#             if iter_counter % 300 == 0:
+#                 # Plot the original heatmap over the original image
+#                 img = (images_batch.squeeze().clone().detach().cpu().permute(1, 2, 0).numpy() * 255).astype(int)
+#                 heatmap = det_preds.squeeze().clone().detach().cpu().numpy()
+#                 fig, ax = plt.subplots()
+#                 ax.imshow(img)
+#                 heatmap_plot = ax.imshow(heatmap, cmap='coolwarm', alpha=0.5)
+#                 cbar = plt.colorbar(heatmap_plot)
+#                 fig.savefig(f"results/pred_map_overlayed_{iter_counter}.png")
+                
+#                 # Plot the thresholded heatmap over the original image
+#                 tau = 0.95
+#                 img = (images_batch.squeeze().clone().detach().cpu().permute(1, 2, 0).numpy() * 255).astype(int)
+#                 heatmap = (det_preds * (det_preds > 0.8).float()).squeeze().clone().detach().cpu().numpy()
+#                 fig, ax = plt.subplots()
+#                 ax.imshow(img)
+#                 heatmap_plot = ax.imshow(heatmap, cmap='coolwarm', alpha=0.5)
+#                 cbar = plt.colorbar(heatmap_plot)
+#                 fig.savefig(f"results/pred_map_overlayed_thresholded_{iter_counter}.png")
+                
+#                 save_image(det_preds, f"results/pred_map_{iter_counter}.png")
+#                 logger.debug(f"Number of predicted objects: {n_objects_preds.item()}")
             
             # Prepare to compute the losses
             orig_sizes = torch.tensor(
@@ -52,15 +79,15 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             ).unsqueeze(1)
             
             # Compute the loss
-            try:
-                det_loss = det_loss_fn(det_preds, anns_batch)
-            except Exception:
-                pdb.set_trace()
-                det_loss = det_loss_fn(det_preds, anns_batch)
-            class_loss = class_loss_fn(n_objects_preds, n_gt_pts)
+            det_loss = det_loss_fn(det_preds, anns_batch)
+            count_loss = count_loss_fn(n_objects_preds, n_gt_pts)
+            
+            # Apply the weights
             det_loss_weighted = det_coeff * det_loss
-            class_loss_weighted = class_coeff * class_loss
-            total_loss = det_loss_weighted + class_loss_weighted
+            count_loss_weighted = count_coeff * count_loss
+            
+            # Add up the loss terms
+            total_loss = det_loss_weighted + count_loss_weighted
             
             # Backpropagate the loss
             total_loss.backward()
@@ -71,7 +98,7 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             
             # Log the info
             writer.add_scalar("Detection loss", det_loss_weighted, iter_counter)
-            writer.add_scalar("Counter loss", class_loss_weighted, iter_counter)
+            writer.add_scalar("Counter loss", count_loss_weighted, iter_counter)
             
             iter_counter += 1
 
@@ -86,15 +113,14 @@ if __name__ == "__main__":
     """Load the dataset"""
     satellite_transforms = SatTransforms(cfg.dataset_params['APPLY_TRAIN_TRANSFORMS'])
     train_transform = satellite_transforms.get_train_transforms()
-    train_set = get_dataset(cfg, transform=train_transform, device=device)
+    train_set = get_dataset(cfg, transform=train_transform, debug_on=cfg.params['DEBUG'], device=device)
     
     """Initialize the dataloaders"""
     train_loader = DataLoader(
         train_set, 
         batch_size=cfg.params['BATCH_SIZE'], 
         shuffle=cfg.params['SHUFFLE'],
-        collate_fn=collate_fn,
-        # num_workers=16
+        collate_fn=collate_fn
     )
     
     """Initialize the model"""

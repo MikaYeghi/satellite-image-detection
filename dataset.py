@@ -14,11 +14,12 @@ logger = get_logger("Dataset logger")
 import pdb
 
 class SatelliteDataset(Dataset):
-    def __init__(self, data_dir, transform=None, shuffle=True, device='cpu'):
+    def __init__(self, data_dir, transform=None, shuffle=True, debug_on=False, device='cpu'):
         super().__init__()
         
         self.data_dir = data_dir
         self.transform = transform
+        self.debug_on = debug_on
         self.metadata = self.extract_metadata(data_dir, shuffle=shuffle)
         self.device = device
         
@@ -44,6 +45,7 @@ class SatelliteDataset(Dataset):
             images_list += glob.glob(images_dir + f"/*.{image_format}")
         annotations_list = glob.glob(annotations_dir + "/*.pkl")
         if len(images_list) != len(annotations_list): logger.warning("Different number of images and annotation files!")
+        if self.debug_on: images_list = ['/'.join(images_list[0].split('/')[:-1]) + "/0003_0003_0006017.jpg"]
         
         # Load the metadata
         logger.info("Loading the dataset...")
@@ -85,7 +87,7 @@ class SatelliteDataset(Dataset):
             image = image.to(self.device)
         
         # Extract the annotations
-        annotations = torch.tensor(data['annotations'], dtype=torch.float32)
+        annotations = torch.tensor(data['annotations'], dtype=torch.long)
         
         # Move to the device
         image = image.to(self.device)

@@ -43,9 +43,9 @@ def check_cfg(cfg, verbose=0):
             logger.debug(f"Created {directory}.")
 
 def get_loss_fns(cfg, device='cpu'):
-    def get_loss_fn(loss_fn_keyword, det_vs_class):
+    def get_loss_fn(loss_fn_keyword, det_vs_count):
         if loss_fn_keyword == "MSELoss":
-            loss_fn = MSELoss()
+            loss_fn = MSELoss(device=device)
         elif loss_fn_keyword == "WeightedHausdorffDistance":
             loss_fn = WeightedHausdorffDistance(
                 resized_height=cfg.params['IMG_HEIGHT'], 
@@ -56,18 +56,18 @@ def get_loss_fns(cfg, device='cpu'):
             loss_fn = SmoothL1Loss()
         else:
             raise NotImplementedError
-        logger.info(f"Using {loss_fn_keyword} loss for {det_vs_class}.")
+        logger.info(f"Using {loss_fn_keyword} loss for {det_vs_count}.")
         return loss_fn
     
     # Extract the loss names
     det_loss = cfg.params['DET_LOSS_FN']
-    class_loss = cfg.params['CLASS_LOSS_FN']
+    count_loss = cfg.params['COUNT_LOSS_FN']
     
     # Generate the loss function
     det_loss_fn = get_loss_fn(det_loss, "detection")
-    class_loss_fn = get_loss_fn(class_loss, "classification")
+    count_loss_fn = get_loss_fn(count_loss, "object count")
     
-    return (det_loss_fn, class_loss_fn)
+    return (det_loss_fn, count_loss_fn)
 
 def get_model(cfg, device='cpu'):
     if cfg.params["MODEL_NAME"] == "UNet":
@@ -83,10 +83,11 @@ def get_model(cfg, device='cpu'):
     logger.info(f"Loaded {cfg.params['MODEL_NAME']} model.")
     return model
 
-def get_dataset(cfg, transform=None, device='cpu'):
+def get_dataset(cfg, transform=None, debug_on=False, device='cpu'):
     dataset = SatelliteDataset(
         cfg.dataset_params['DATASET_DIR'],
         transform=transform,
+        debug_on=debug_on,
         device=device
     )
     logger.info(f"Loaded a dataset with {len(dataset)} images.")

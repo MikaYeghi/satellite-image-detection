@@ -11,31 +11,54 @@ logger = get_logger("Losses logger")
 import pdb
 
 class MSELoss(nn.MSELoss):
-    def __init__(self):
+    """
+    Module for implementing an L2 loss on the location predictions.
+    """
+    def __init__(self, device='cpu'):
         super().__init__()
+        
+        self.loss_fn = nn.MSELoss()
+        self.device = device
+        
+    def forward(self, pred_maps, gt_locations_list):
+        # Obtain the number of GT locations
+        n_gt_locations = torch.tensor(
+            [gt_locations.shape[0] for gt_locations in gt_locations_list], 
+            dtype=torch.float32, 
+            device=self.device
+        )
+        
+        # Initialize the GT heatmaps
+        gt_maps = torch.zeros(size=pred_maps.shape, dtype=torch.float32, device=self.device)
+        
+        # Add the GT points to each heatmap
+        for i in range(len(gt_locations_list)):
+            if n_gt_locations[i] > 0:
+                gt_locations = gt_locations_list[i]
+                # NOTE: gt_locations have the following format: (x, y).
+                # Thus, the 1st term is responsible for the column index, while the 2nd term is responsible
+                # for the row index. Hence, gt_locations[:, 1], gt_locations[:, 0] instead of 
+                # gt_locations[:, 0], gt_locations[:, 1]
+                gt_maps[i][gt_locations[:, 1], gt_locations[:, 0]] = 1.
+        
+        # Compute the weighted loss
+        diff = gt_maps - pred_maps
+        loss = torch.norm(diff, p=2) + torch.norm(diff * gt_maps * 1000, p=2)
+        
+        return loss
 
 class SmoothL1Loss(nn.SmoothL1Loss):
+    """
+    Module for implementing the smooth L1 loss on the predicted number of objects.
+    """
     def __init__(self, device='cuda'):
         super().__init__()
         
         self.loss_fn = SL1L()
         self.device = device
         
-    def forward(self, pred_maps, gt_locations):
-        loss = 0
-        for k in range(len(gt_locations)):
-            # Generate the GT map
-            gt_points = torch.round(gt_locations[k]).long().to(self.device)
-            gt_map = torch.zeros(size=pred_maps[k].shape, device=self.device)
-            gt_map[gt_points[:, 0], gt_points[:, 1]] = 1.
-            
-            # Find the difference
-            loss_ = self.loss_fn(gt_map, pred_maps[k])
-            
-            # Add to the total loss
-            loss = loss + loss_
-        
-        return loss
+    def forward(self, pred_count, gt_count):
+        return self.loss_fn(pred_count, gt_count)
         
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,
