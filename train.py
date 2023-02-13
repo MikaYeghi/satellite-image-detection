@@ -132,12 +132,6 @@ def main(rank, world_size):
     train_set = get_dataset(cfg, transform=train_transform, debug_on=cfg.params['DEBUG'], device=rank)
     
     """Initialize the dataloaders"""
-    # train_loader = DataLoader(
-    #     train_set, 
-    #     batch_size=cfg.params['BATCH_SIZE'], 
-    #     shuffle=cfg.params['SHUFFLE'],
-    #     collate_fn=collate_fn
-    # )
     train_loader = get_dataloader(
         train_set, 
         rank,
@@ -168,8 +162,9 @@ def main(rank, world_size):
     cleanup()
     
 if __name__ == "__main__":
-    # Number of GPUs
-    world_size = 2
+    # Obtain the number of GPUs from the config file
+    N_GPUS = TrainConfig().params['N_GPUS']
+    world_size = N_GPUS
     
     mp.spawn(
         main,

@@ -7,6 +7,7 @@ class TrainConfig(BaseConfig):
         super().__init__()
         
         self.params = {
+            "N_GPUS": 2,
             "OUTPUT_DIR": "output/",
             "N_EPOCHS": 5000,
             "BATCH_SIZE": 16,
