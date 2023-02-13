@@ -11,9 +11,6 @@ logger = get_logger("Utils logger")
 
 import pdb
 
-def make_train_step():
-    pass
-
 def collate_fn(samples):
     images = []
     anns = []

@@ -102,9 +102,6 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             
             iter_counter += 1
 
-def do_test():
-    pass
-
 if __name__ == "__main__":
     """Set up the configurations"""
     cfg = TrainConfig()
@@ -134,11 +131,7 @@ if __name__ == "__main__":
     
     """Training"""
     writer = get_tensorboard_writer(cfg.logging_params['LOG_DIR'])
-    if not cfg.params['EVAL_ONLY']:
-        do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer)
-    
-    """Evaluate"""
-    do_test()
+    do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer)
     
     """Close the tensorboard logger"""
     writer.flush()

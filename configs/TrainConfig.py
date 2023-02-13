@@ -22,7 +22,6 @@ class TrainConfig(BaseConfig):
             "COUNT_LOSS_FN": "SmoothL1Loss",
             "DET_COEFFICIENT": 0.01,
             "COUNT_COEFFICIENT": 1.0,
-            "EVAL_ONLY": False,
             "SHUFFLE": True,
             "VERBOSE": 1,
             "DEBUG": False
