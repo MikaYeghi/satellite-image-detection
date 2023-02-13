@@ -2,6 +2,7 @@ import torch
 from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import ExponentialLR
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -113,9 +114,9 @@ def get_tensorboard_writer(log_dir):
     return writer
 
 def get_optimizer_scheduler(model, base_lr, lr_gamma, scheduled=False):
+    optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
     if scheduled:
-        raise NotImplementedError
+        scheduler = ExponentialLR(optimizer, gamma=0.9)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
         scheduler = None
-        return (optimizer, scheduler)
+    return (optimizer, scheduler)

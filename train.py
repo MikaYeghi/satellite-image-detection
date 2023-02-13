@@ -115,8 +115,16 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, r
             # Log the info
             writer.add_scalar("Detection loss", det_loss_weighted, iter_counter)
             writer.add_scalar("Counter loss", count_loss_weighted, iter_counter)
+            if cfg.params['LR_SCHEDULING_ON']:
+                writer.add_scalar("LR", scheduler.get_last_lr()[-1], iter_counter)
+            else:
+                writer.add_scalar("LR", cfg.params['BASE_LR'], iter_counter)
             
             iter_counter += 1
+        
+        # Scheduler step
+        if cfg.params['LR_SCHEDULING_ON'] and (epoch + 1) % cfg.params['SCHEDULER_FREQ'] == 0 and epoch != 0:
+            scheduler.step()
 
 def main(rank, world_size):
     """Setup distributed data parallelism"""
