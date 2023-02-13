@@ -1,6 +1,9 @@
 import torch
 from pathlib import Path
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from models_zoo.PointDetector.unet_model import UNet
 from losses import MSELoss, WeightedHausdorffDistance, SmoothL1Loss
@@ -89,6 +92,20 @@ def get_dataset(cfg, transform=None, debug_on=False, device='cpu'):
     )
     logger.info(f"Loaded a dataset with {len(dataset)} images.")
     return dataset
+
+def get_dataloader(dataset, rank, world_size, batch_size=32, pin_memory=False, num_workers=0, shuffle=False):
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, drop_last=False)
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        pin_memory=pin_memory, 
+        num_workers=num_workers, 
+        drop_last=False, 
+        shuffle=False, 
+        sampler=sampler,
+        collate_fn=collate_fn
+    )
+    return dataloader
 
 def get_tensorboard_writer(log_dir):
     writer = SummaryWriter(log_dir=log_dir)

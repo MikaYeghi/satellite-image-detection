@@ -1,21 +1,23 @@
+import os
 import cv2
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from configs.TrainConfig import TrainConfig
 from transforms import SatTransforms
 from utils import (
-    make_train_step, 
     get_model, 
     get_dataset, 
     get_loss_fns, 
     get_tensorboard_writer, 
-    check_cfg, 
-    collate_fn,
-    get_optimizer_scheduler
+    check_cfg,
+    get_optimizer_scheduler,
+    get_dataloader
 )
 
 from logger import get_logger
@@ -29,6 +31,15 @@ except RuntimeError:
 
 import pdb
 
+
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
+def cleanup():
+    dist.destroy_process_group()
+    
 def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
     # Prepare to training
     iter_counter = 0
@@ -38,6 +49,11 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
     
     for epoch in range(cfg.params['N_EPOCHS']):
         training_bar = tqdm(train_loader, desc=f"Epoch #{epoch + 1}")
+        
+        # Explicitly tell the sampler which epoch number it is
+        train_loader.sampler.set_epoch(epoch)
+        
+        # Loop through the dataset
         for images_batch, anns_batch in training_bar:
             # Predict
             model.train()
@@ -102,7 +118,10 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             
             iter_counter += 1
 
-if __name__ == "__main__":
+def main(rank, world_size):
+    """Setup distributed data parallelism"""
+    setup(rank, world_size)
+    
     """Set up the configurations"""
     cfg = TrainConfig()
     check_cfg(cfg, verbose=cfg.params['VERBOSE'])
@@ -113,15 +132,23 @@ if __name__ == "__main__":
     train_set = get_dataset(cfg, transform=train_transform, debug_on=cfg.params['DEBUG'], device=device)
     
     """Initialize the dataloaders"""
-    train_loader = DataLoader(
+    # train_loader = DataLoader(
+    #     train_set, 
+    #     batch_size=cfg.params['BATCH_SIZE'], 
+    #     shuffle=cfg.params['SHUFFLE'],
+    #     collate_fn=collate_fn
+    # )
+    train_loader = get_dataloader(
         train_set, 
-        batch_size=cfg.params['BATCH_SIZE'], 
-        shuffle=cfg.params['SHUFFLE'],
-        collate_fn=collate_fn
+        rank,
+        world_size,
+        batch_size=cfg.params['BATCH_SIZE'],
+        shuffle=cfg.params['SHUFFLE']
     )
     
     """Initialize the model"""
-    model = get_model(cfg, device=device)
+    model = get_model(cfg).to(rank)
+    model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     
     """Optimizer, loss function, evaluator"""
     loss_fns = get_loss_fns(cfg, device=device) # (det_loss, class_loss)
@@ -136,3 +163,16 @@ if __name__ == "__main__":
     """Close the tensorboard logger"""
     writer.flush()
     writer.close()
+    
+    """Clean up the processes"""
+    cleanup()
+    
+if __name__ == "__main__":
+    # Number of GPUs
+    world_size = 2
+    
+    mp.spawn(
+        main,
+        args=(world_size,),
+        nprocs=world_size
+    )
