@@ -40,7 +40,7 @@ def setup(rank, world_size):
 def cleanup():
     dist.destroy_process_group()
     
-def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
+def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank):
     # Prepare to training
     iter_counter = 0
     det_loss_fn, count_loss_fn = loss_fns
@@ -86,12 +86,12 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer):
             # Prepare to compute the losses
             orig_sizes = torch.tensor(
                 [[cfg.params['IMG_HEIGHT'], cfg.params['IMG_WIDTH']] for _ in range(images_batch.shape[0])],
-                device=device
+                device=rank
             )
             n_gt_pts = torch.tensor(
                 [len(sample) for sample in anns_batch],
                 dtype=torch.float32,
-                device=device
+                device=rank
             ).unsqueeze(1)
             
             # Compute the loss
@@ -129,7 +129,7 @@ def main(rank, world_size):
     """Load the dataset"""
     satellite_transforms = SatTransforms(cfg.dataset_params['APPLY_TRAIN_TRANSFORMS'])
     train_transform = satellite_transforms.get_train_transforms()
-    train_set = get_dataset(cfg, transform=train_transform, debug_on=cfg.params['DEBUG'], device=device)
+    train_set = get_dataset(cfg, transform=train_transform, debug_on=cfg.params['DEBUG'], device=rank)
     
     """Initialize the dataloaders"""
     # train_loader = DataLoader(
@@ -151,14 +151,14 @@ def main(rank, world_size):
     model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     
     """Optimizer, loss function, evaluator"""
-    loss_fns = get_loss_fns(cfg, device=device) # (det_loss, class_loss)
+    loss_fns = get_loss_fns(cfg, device=rank) # (det_loss, class_loss)
     optimizer, scheduler = get_optimizer_scheduler(
         model, cfg.params['BASE_LR'], cfg.params['LR_GAMMA'], cfg.params['LR_SCHEDULING_ON']
     )
     
     """Training"""
     writer = get_tensorboard_writer(cfg.logging_params['LOG_DIR'])
-    do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer)
+    do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank)
     
     """Close the tensorboard logger"""
     writer.flush()

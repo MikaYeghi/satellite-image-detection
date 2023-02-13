@@ -53,7 +53,7 @@ def get_loss_fns(cfg, device='cpu'):
                 device=device
             )
         elif loss_fn_keyword == "SmoothL1Loss":
-            loss_fn = SmoothL1Loss()
+            loss_fn = SmoothL1Loss(device=device)
         else:
             raise NotImplementedError
         logger.info(f"Using {loss_fn_keyword} loss for {det_vs_count}.")
