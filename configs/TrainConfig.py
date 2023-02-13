@@ -9,7 +9,8 @@ class TrainConfig(BaseConfig):
         self.params = {
             "N_GPUS": 2,
             "OUTPUT_DIR": "output/",
-            "N_EPOCHS": 5000,
+            "MODEL_WEIGHTS": None,
+            "N_EPOCHS": 20,
             "BATCH_SIZE": 16,
             "BASE_LR": 0.0001,
             "LR_GAMMA": 0.1,

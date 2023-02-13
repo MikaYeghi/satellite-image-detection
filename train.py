@@ -11,13 +11,14 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from configs.TrainConfig import TrainConfig
 from transforms import SatTransforms
 from utils import (
-    get_model, 
     get_dataset, 
     get_loss_fns, 
     get_tensorboard_writer, 
     check_cfg,
     get_optimizer_scheduler,
-    get_dataloader
+    get_dataloader,
+    save_checkpoint,
+    load_checkpoint
 )
 
 from logger import get_logger
@@ -40,14 +41,20 @@ def setup(rank, world_size):
 def cleanup():
     dist.destroy_process_group()
     
-def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank):
+def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank, start_epoch, iter_counter):
     # Prepare to training
     iter_counter = 0
     det_loss_fn, count_loss_fn = loss_fns
     det_coeff = cfg.params['DET_COEFFICIENT']
     count_coeff = cfg.params['COUNT_COEFFICIENT']
+    end_epoch = cfg.params['N_EPOCHS']
     
-    for epoch in range(cfg.params['N_EPOCHS']):
+    # Check that the start epoch is less than the end epoch
+    if start_epoch >= end_epoch:
+        logger.warning("Start epoch is greater or equal to the end epoch! Terminating the training.")
+        return
+    
+    for epoch in range(start_epoch, cfg.params['N_EPOCHS']):
         training_bar = tqdm(train_loader, desc=f"Epoch #{epoch + 1}")
         
         # Explicitly tell the sampler which epoch number it is
@@ -125,6 +132,12 @@ def do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, r
         # Scheduler step
         if cfg.params['LR_SCHEDULING_ON'] and (epoch + 1) % cfg.params['SCHEDULER_FREQ'] == 0 and epoch != 0:
             scheduler.step()
+            
+        # Save the model
+        save_checkpoint(model, iter_counter, epoch, cfg.params['OUTPUT_DIR'], is_final=False)
+    
+    # Save the final model
+    save_checkpoint(model, iter_counter, epoch, cfg.params['OUTPUT_DIR'], is_final=True)
 
 def main(rank, world_size):
     """Setup distributed data parallelism"""
@@ -149,7 +162,7 @@ def main(rank, world_size):
     )
     
     """Initialize the model"""
-    model = get_model(cfg).to(rank)
+    model, start_epoch, iter_counter = load_checkpoint(cfg, device=rank)
     model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     
     """Optimizer, loss function, evaluator"""
@@ -160,7 +173,7 @@ def main(rank, world_size):
     
     """Training"""
     writer = get_tensorboard_writer(cfg.logging_params['LOG_DIR'])
-    do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank)
+    do_train(cfg, train_loader, loss_fns, model, optimizer, scheduler, writer, rank, start_epoch, iter_counter)
     
     """Close the tensorboard logger"""
     writer.flush()
